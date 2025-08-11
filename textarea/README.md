@@ -16,12 +16,10 @@ import (
 )
 
 func main() {
-  editor, err := textarea.NewInput("Title", "Body")
+    editor, err := textarea.NewInput("Title", "Body")
 	if err != nil {
 		panic(err)
 	}
-  
-	defer editor.restore()
 
 	lines, err := editor.Run()
 	if err != nil {
