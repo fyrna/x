@@ -1,201 +1,244 @@
-//go:build linux
-// +build linux
-
 package textarea
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
-	"os"
 
-	"golang.org/x/term"
+	"github.com/fyrna/x/term"
 )
 
 const (
-	clear = "\033[2J\033[H"
-	grey  = "\033[38;5;241m"
-	green = "\033[32m"
-	reset = "\033[0m"
+	grey      = "\033[38;5;241m"
+	green     = "\033[32m"
+	reset     = "\033[0m"
+	lightGrey = "\033[38;5;246m"
 )
 
+// TextArea represents a multi-line text input area in the terminal
 type TextArea struct {
 	title    string
 	bodyHint string
-
-	lines [][]rune
-	curY  int
-	curX  int
-
-	oldState *term.State
+	lines    [][]rune
+	cursor   struct {
+		x, y int
+	}
 }
 
-// NewTextArea creates a new editor.
-func NewInput(title, bodyHint string) (*TextArea, error) {
-	old, err := term.MakeRaw(int(os.Stdin.Fd()))
-
-	if err != nil {
-		return nil, err
-	}
-
+// NewInput creates a new TextArea instance
+func NewInput(title, bodyHint string) *TextArea {
 	return &TextArea{
 		title:    title,
 		bodyHint: bodyHint,
-		lines:    [][]rune{},
-		oldState: old,
-	}, nil
+		lines:    [][]rune{{}},
+	}
 }
 
-// Run shows the UI and returns the final lines.
-// Ctrl-D => lines, nil
-// Ctrl-C => nil, interrupted
+// Run starts the text input session
 func (t *TextArea) Run() ([]string, error) {
-	defer t.restore()
-	t.redraw()
+	if err := term.Init(); err != nil {
+		return nil, err
+	}
+	defer term.Restore()
 
 	for {
-		// read single byte (raw mode)
-		var buf [1]byte
+		t.redraw()
 
-		if _, err := os.Stdin.Read(buf[:]); err != nil {
+		ev, err := term.Read()
+		if err != nil {
 			return nil, err
 		}
 
-		b := buf[0]
-
-		switch b {
-		case 3: // Ctrl-C
-			return nil, errors.New("interrupted")
-		case 4: // Ctrl-D
-			out := make([]string, len(t.lines))
-			for i, r := range t.lines {
-				out[i] = string(r)
+		if err := t.handleInput(ev); err != nil {
+			if errors.Is(err, ErrFinished) {
+				return t.finish(), nil
 			}
-			return out, nil
-		case 13: // Enter
-			t.handleEnter()
-		case 127, 8: // Backspace
-			t.handleBackspace()
-		case 27: // possible arrow key
-			seq := make([]byte, 2)
-			if _, err := os.Stdin.Read(seq); err != nil {
-				continue
-			}
-			if seq[0] == '[' {
-				t.handleArrow(seq[1])
-			}
-		default:
-			if b >= 32 && b < 127 {
-				t.insertRune(rune(b))
-			}
-		}
-
-		t.redraw()
-	}
-}
-
-// restore terminal to cooked mode
-func (t *TextArea) restore() {
-	term.Restore(int(os.Stdin.Fd()), t.oldState)
-}
-
-func (t *TextArea) insertRune(r rune) {
-	if t.curY >= len(t.lines) {
-		t.lines = append(t.lines, []rune{})
-	}
-
-	line := t.lines[t.curY]
-	left := append([]rune{}, line[:t.curX]...)
-	right := append([]rune{}, line[t.curX:]...)
-
-	t.lines[t.curY] = append(append(left, r), right...)
-	t.curX++
-}
-
-func (t *TextArea) handleBackspace() {
-	if t.curX > 0 {
-		line := t.lines[t.curY]
-
-		t.lines[t.curY] = append(line[:t.curX-1], line[t.curX:]...)
-		t.curX--
-	} else if t.curY > 0 {
-		// merge to previous line
-		prev := t.lines[t.curY-1]
-
-		t.lines[t.curY-1] = append(prev, t.lines[t.curY]...)
-		t.lines = append(t.lines[:t.curY], t.lines[t.curY+1:]...)
-		t.curY--
-		t.curX = len(prev)
-	}
-}
-
-func (t *TextArea) handleEnter() {
-	if t.curY >= len(t.lines) {
-		t.lines = append(t.lines, []rune{})
-	}
-	line := t.lines[t.curY]
-	left := append([]rune{}, line[:t.curX]...)
-	right := append([]rune{}, line[t.curX:]...)
-
-	t.lines[t.curY] = left
-	// insert right under cursor
-	t.lines = append(t.lines[:t.curY+1], append([][]rune{right}, t.lines[t.curY+1:]...)...)
-	t.curY++
-	t.curX = 0
-}
-
-func (t *TextArea) handleArrow(ch byte) {
-	switch ch {
-	case 'A': // up
-		if t.curY > 0 {
-			t.curY--
-			if t.curX > len(t.lines[t.curY]) {
-				t.curX = len(t.lines[t.curY])
-			}
-		}
-	case 'B': // down
-		if t.curY < len(t.lines)-1 {
-			t.curY++
-			if t.curX > len(t.lines[t.curY]) {
-				t.curX = len(t.lines[t.curY])
-			}
-		}
-	case 'C': // right
-		if t.curX < len(t.lines[t.curY]) {
-			t.curX++
-		}
-	case 'D': // left
-		if t.curX > 0 {
-			t.curX--
+			return nil, err
 		}
 	}
 }
 
-func (t *TextArea) redraw() {
-	fmt.Print(clear)
-
-	// header
-	fmt.Println(t.title)
-	fmt.Println()
-
-	// content
+// finish returns the current text as a slice of strings
+func (t *TextArea) finish() []string {
+	result := make([]string, len(t.lines))
 	for i, line := range t.lines {
-		prefix := fmt.Sprintf("%s  │ %s", grey, reset)
-		if i == t.curY {
-			left := string(line[:t.curX])
-			right := string(line[t.curX:])
-			cursor := "\033[7m \033[0m"
+		result[i] = string(line)
+	}
+	return result
+}
 
-			fmt.Printf("\r%s%s> %s%s%s%s\n", prefix, green, reset, left, cursor, right)
+// handleInput processes a single input event
+func (t *TextArea) handleInput(ev term.Event) error {
+	switch {
+	case ev.IsCtrl('c'):
+		return errors.New("interrupted")
+	case ev.IsCtrl('d'):
+		return ErrFinished
+	case ev.Key == term.KeyRune:
+		t.insertRune(ev.Rune)
+	case ev.Key == term.KeySpace:
+		t.insertRune(' ')
+	case ev.Key == term.KeyEnter:
+		t.handleEnter()
+	case ev.Key == term.KeyBackspace:
+		t.handleBackspace()
+	case ev.Key == term.KeyUp:
+		t.moveUp()
+	case ev.Key == term.KeyDown:
+		t.moveDown()
+	case ev.Key == term.KeyLeft:
+		t.moveLeft()
+	case ev.Key == term.KeyRight:
+		t.moveRight()
+	}
+	return nil
+}
+
+// insertRune inserts a rune at the current cursor position
+func (t *TextArea) insertRune(r rune) {
+	if t.cursor.y >= len(t.lines) {
+		t.lines = append(t.lines, []rune{})
+	}
+
+	line := t.lines[t.cursor.y]
+	left := line[:t.cursor.x]
+	right := line[t.cursor.x:]
+	t.lines[t.cursor.y] = append(append(left, r), right...)
+	t.cursor.x++
+}
+
+// handleBackspace handles backspace key press
+func (t *TextArea) handleBackspace() {
+	if t.cursor.x > 0 {
+		// Delete within current line
+		line := t.lines[t.cursor.y]
+		t.lines[t.cursor.y] = append(line[:t.cursor.x-1], line[t.cursor.x:]...)
+		t.cursor.x--
+	} else if t.cursor.y > 0 {
+		// Merge with previous line
+		prev := t.lines[t.cursor.y-1]
+		t.lines[t.cursor.y-1] = append(prev, t.lines[t.cursor.y]...)
+		t.lines = append(t.lines[:t.cursor.y], t.lines[t.cursor.y+1:]...)
+		t.cursor.y--
+		t.cursor.x = len(prev)
+	}
+}
+
+// handleEnter handles enter/return key press
+func (t *TextArea) handleEnter() {
+	line := t.lines[t.cursor.y]
+	left := line[:t.cursor.x]
+	right := line[t.cursor.x:]
+
+	t.lines[t.cursor.y] = left
+	t.lines = append(t.lines[:t.cursor.y+1], append([][]rune{right}, t.lines[t.cursor.y+1:]...)...)
+
+	t.cursor.y++
+	t.cursor.x = 0
+}
+
+// moveUp moves the cursor up
+func (t *TextArea) moveUp() {
+	if t.cursor.y > 0 {
+		t.cursor.y--
+		t.snapX()
+	}
+}
+
+// moveDown moves the cursor down
+func (t *TextArea) moveDown() {
+	if t.cursor.y < len(t.lines)-1 {
+		t.cursor.y++
+		t.snapX()
+	}
+}
+
+// moveLeft moves the cursor left
+func (t *TextArea) moveLeft() {
+	if t.cursor.x > 0 {
+		t.cursor.x--
+	}
+}
+
+// moveRight moves the cursor right
+func (t *TextArea) moveRight() {
+	currentLineLen := len(t.lines[t.cursor.y])
+	if t.cursor.x < currentLineLen {
+		t.cursor.x++
+	}
+}
+
+// snapX ensures the cursor X position is within bounds of the current line
+func (t *TextArea) snapX() {
+	currentLineLen := len(t.lines[t.cursor.y])
+	if t.cursor.x > currentLineLen {
+		t.cursor.x = currentLineLen
+	}
+}
+
+// redraw renders the text area to the terminal
+func (t *TextArea) redraw() {
+	var buf bytes.Buffer
+
+	// Clear screen and move to top-left
+	buf.WriteString("\033[H\033[2J")
+
+	// Title
+	buf.WriteString(t.title)
+	buf.WriteString("\n\n")
+
+	// Body hint
+	buf.WriteString("  ")
+	buf.WriteString(t.bodyHint)
+	buf.WriteString("\n")
+
+	// Content lines
+	for i, line := range t.lines {
+		buf.WriteString(fmt.Sprintf("\033[%d;1H", 4+i)) // Position each line
+
+		if i == t.cursor.y {
+			t.renderActiveLine(&buf, line)
 		} else {
-			fmt.Printf("\r%s  %s\n", prefix, string(line))
+			t.renderInactiveLine(&buf, line)
 		}
 	}
 
-	// empty line below last
-	if t.curY == len(t.lines) {
-		fmt.Printf("\r%s  │ %s%s> %s\033[7m \033[0m\n", grey, green, reset, reset)
-	}
+	// Footer
+	footerRow := 5 + len(t.lines)
+	buf.WriteString(fmt.Sprintf("\033[%d;1H", footerRow))
+	buf.WriteString(lightGrey)
+	buf.WriteString("Ctrl-D to finish  •  Ctrl-C to cancel")
+	buf.WriteString(reset)
 
-	fmt.Println()
-	fmt.Print("\r\033[38;5;246mCtrl-D to finish  •  Ctrl-C to cancel\033[0m\n")
+	fmt.Print(buf.String())
 }
+
+// renderActiveLine renders a line with cursor
+func (t *TextArea) renderActiveLine(buf *bytes.Buffer, line []rune) {
+	buf.WriteString(grey)
+	buf.WriteString("  │ ")
+	buf.WriteString(green)
+	buf.WriteString("> ")
+	buf.WriteString(reset)
+
+	left := string(line[:t.cursor.x])
+	right := string(line[t.cursor.x:])
+
+	buf.WriteString(left)
+	buf.WriteString("\033[7m \033[0m") // Cursor
+	buf.WriteString(right)
+	buf.WriteString("\033[K") // Clear to end of line
+}
+
+// renderInactiveLine renders a normal line
+func (t *TextArea) renderInactiveLine(buf *bytes.Buffer, line []rune) {
+	buf.WriteString(grey)
+	buf.WriteString("  │ ")
+	buf.WriteString(reset)
+	buf.WriteString("  ")
+	buf.WriteString(string(line))
+	buf.WriteString("\033[K") // Clear to end of line
+}
+
+// ErrFinished is returned when the user finishes input (Ctrl-D)
+var ErrFinished = errors.New("finished")
