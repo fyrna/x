@@ -35,29 +35,19 @@ const (
 // TextArea represents an enhanced text input area
 type TextArea struct {
 	title        string
-	bodyHint     string
 	lines        [][]rune
 	cursor       struct{ x, y int }
 	showLineNr   bool
-	history      []Snapshot
-	historyPos   int
 	searchMode   bool
 	searchTerm   []rune
 	syntaxMode   SyntaxMode
 	highlighters map[SyntaxMode]Highlighter
 }
 
-// Snapshot represents a state snapshot for undo/redo
-type Snapshot struct {
-	lines  [][]rune
-	cursor struct{ x, y int }
-}
-
 // NewInput creates a new TextArea instance
 func NewInput(title, bodyHint string) *TextArea {
 	ta := &TextArea{
 		title:        title,
-		bodyHint:     bodyHint,
 		lines:        [][]rune{{}},
 		showLineNr:   true,
 		highlighters: make(map[SyntaxMode]Highlighter),
@@ -112,12 +102,6 @@ func (t *TextArea) handleNormalInput(ev term.Event) error {
 	case ev.IsCtrl('s'):
 		t.toggleSearch()
 		return nil
-	case ev.IsCtrl('z'):
-		t.undo()
-		return nil
-	case ev.IsCtrl('y'):
-		t.redo()
-		return nil
 	case ev.IsCtrl('g'):
 		t.toggleSyntaxMode()
 		return nil
@@ -125,16 +109,12 @@ func (t *TextArea) handleNormalInput(ev term.Event) error {
 		t.toggleLineNumbers()
 		return nil
 	case ev.Key == term.KeyRune:
-		t.takeSnapshot()
 		t.insertRune(ev.Rune)
 	case ev.Key == term.KeySpace:
-		t.takeSnapshot()
 		t.insertRune(' ')
 	case ev.Key == term.KeyEnter:
-		t.takeSnapshot()
 		t.handleEnter()
 	case ev.Key == term.KeyBackspace:
-		t.takeSnapshot()
 		t.handleBackspace()
 	case ev.Key == term.KeyUp:
 		t.moveUp()
@@ -252,55 +232,6 @@ func (t *TextArea) snapX() {
 	}
 }
 
-// ** Undo/Redo **
-// TODO: undo/redo currently only a basic implementation, it even very buggy lmao!
-
-func (t *TextArea) takeSnapshot() {
-	if t.historyPos < len(t.history)-1 {
-		t.history = t.history[:t.historyPos+1]
-	}
-
-	t.history = append(t.history, Snapshot{
-		lines:  t.copyLines(),
-		cursor: t.cursor,
-	})
-
-	t.historyPos = len(t.history) - 1
-}
-
-// i still can't figured out these two, but keep it for "history" XD
-func (t *TextArea) undo() {
-	if t.historyPos > 0 {
-		t.historyPos--
-		t.restoreSnapshot()
-	}
-}
-
-func (t *TextArea) redo() {
-	if t.historyPos < len(t.history)-1 {
-		t.historyPos++
-		t.restoreSnapshot()
-	}
-}
-
-func (t *TextArea) restoreSnapshot() {
-	snap := t.history[t.historyPos]
-	t.lines = t.copyLinesSlice(snap.lines)
-	t.cursor = snap.cursor
-}
-
-func (t *TextArea) copyLines() [][]rune {
-	return t.copyLinesSlice(t.lines)
-}
-
-func (t *TextArea) copyLinesSlice(src [][]rune) [][]rune {
-	dst := make([][]rune, len(src))
-	for i, line := range src {
-		dst[i] = append([]rune(nil), line...)
-	}
-	return dst
-}
-
 // ** Search **
 // TODO: better UI
 
@@ -401,11 +332,6 @@ func (t *TextArea) redraw() {
 	buf.WriteString(t.title)
 	buf.WriteString("\n\n")
 
-	// Body hint
-	buf.WriteString("  ")
-	buf.WriteString(t.bodyHint)
-	buf.WriteString("\n")
-
 	// Content lines
 	for i, line := range t.lines {
 		buf.WriteString(fmt.Sprintf("\033[%d;1H", 4+i)) // Position each line
@@ -487,8 +413,8 @@ func (t *TextArea) renderStatusBar(buf *bytes.Buffer) {
 	buf.WriteString(status)
 
 	// Right status
-	help := " ^S:Search ^G:Syntax ^L:LineNums ^Z:Undo ^Y:Redo ^D:Finish "
-	width := 80
+	help := " ^S:Search ^G:Syntax ^L:LineNums ^D:Finish "
+	width := 70
 	padding := width - len(status) - len(help) - 1
 
 	if padding > 0 {
