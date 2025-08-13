@@ -45,7 +45,7 @@ type TextArea struct {
 }
 
 // NewInput creates a new TextArea instance
-func NewInput(title, bodyHint string) *TextArea {
+func NewInput(title string) *TextArea {
 	ta := &TextArea{
 		title:        title,
 		lines:        [][]rune{{}},
