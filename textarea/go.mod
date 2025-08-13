@@ -3,8 +3,8 @@ module github.com/fyrna/x/textarea
 go 1.24.5
 
 require (
-	github.com/fyrna/x/term v0.0.0
-	github.com/fyrna/x/color v0.0.0
+	github.com/fyrna/x/term v0.0.0-20250813042448-84bdf9baace6
+	github.com/fyrna/x/color v0.0.0-20250813042448-84bdf9baace6
 )
 
 require (
