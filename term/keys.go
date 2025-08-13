@@ -24,13 +24,11 @@ const (
 	KeyTab
 	KeySpace
 
-	// Arrows
+	// Navigation
 	KeyUp
 	KeyDown
 	KeyLeft
 	KeyRight
-
-	// Navigation
 	KeyHome
 	KeyEnd
 	KeyPgUp
