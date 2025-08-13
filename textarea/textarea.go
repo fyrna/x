@@ -7,19 +7,8 @@ import (
 	"regexp"
 	"strings"
 
+	"github.com/fyrna/x/color"
 	"github.com/fyrna/x/term"
-)
-
-const (
-	grey      = "\033[38;5;241m"
-	green     = "\033[32m"
-	red       = "\033[31m"
-	blue      = "\033[34m"
-	yellow    = "\033[33m"
-	magenta   = "\033[35m"
-	cyan      = "\033[36m"
-	reset     = "\033[0m"
-	lightGrey = "\033[38;5;246m"
 )
 
 // HighlightRule defines a syntax highlighting rule
@@ -382,7 +371,7 @@ func (t *TextArea) highlightLine(line []rune) string {
 			// Text after match with color
 			result.WriteString(rule.Color)
 			result.WriteString(strLine[match[0]:match[1]])
-			result.WriteString(reset)
+			result.WriteString(color.Reset)
 			lastPos = match[1]
 		}
 
@@ -437,16 +426,16 @@ func (t *TextArea) redraw() {
 func (t *TextArea) renderLine(buf *bytes.Buffer, lineNum int, line []rune) {
 	// Line number
 	if t.showLineNr {
-		buf.WriteString(grey)
+		buf.WriteString(color.Fg256(241))
 		fmt.Fprintf(buf, " %3d ", lineNum+1)
-		buf.WriteString(reset)
+		buf.WriteString(color.Reset)
 		buf.WriteString(" ")
 	}
 
 	// Line border
-	buf.WriteString(grey)
+	buf.WriteString(color.Fg256(241))
 	buf.WriteString("│ ")
-	buf.WriteString(reset)
+	buf.WriteString(color.Reset)
 
 	// Line content
 	if lineNum == t.cursor.y {
@@ -463,9 +452,9 @@ func (t *TextArea) renderActiveLine(buf *bytes.Buffer, line []rune) {
 	right := string(line[t.cursor.x:])
 
 	buf.WriteString(t.highlightLine([]rune(left)))
-	buf.WriteString(green)
+	buf.WriteString(color.Green)
 	buf.WriteString("|")
-	buf.WriteString(reset)
+	buf.WriteString(color.Reset)
 	buf.WriteString(t.highlightLine([]rune(right)))
 	buf.WriteString("\033[K") // Clear to end of line
 }
@@ -491,7 +480,7 @@ func (t *TextArea) renderStatusBar(buf *bytes.Buffer) {
 	}
 
 	buf.WriteString(fmt.Sprintf("\033[%d;1H", row))
-	buf.WriteString(lightGrey)
+	buf.WriteString(color.Fg256(246))
 
 	// Left status
 	status := fmt.Sprintf(" %s | Ln %d, Col %d ", t.getSyntaxName(), t.cursor.y+1, t.cursor.x+1)
@@ -507,7 +496,7 @@ func (t *TextArea) renderStatusBar(buf *bytes.Buffer) {
 	}
 
 	buf.WriteString(help)
-	buf.WriteString(reset)
+	buf.WriteString(color.Reset)
 }
 
 func (t *TextArea) getSyntaxName() string {
@@ -533,13 +522,13 @@ func (h *GoHighlighter) Name() string { return "Go" }
 
 func (h *GoHighlighter) Rules() []HighlightRule {
 	return []HighlightRule{
-		{regexp.MustCompile(`\b(func|package|import|var|const|type|struct|interface|return|if|else|for|range|select|case|default|go|defer)\b`), blue},
-		{regexp.MustCompile(`\b(true|false|nil)\b`), yellow},
-		{regexp.MustCompile(`\b(int|string|bool|float|rune|byte|error)\b`), cyan},
-		{regexp.MustCompile(`//.*`), grey},
-		{regexp.MustCompile(`".*?"`), green},
-		{regexp.MustCompile("`.*?`"), green},
-		{regexp.MustCompile(`'.*?'`), green},
+		{regexp.MustCompile(`\b(func|package|import|var|const|type|struct|interface|return|if|else|for|range|select|case|default|go|defer)\b`), color.Blue},
+		{regexp.MustCompile(`\b(true|false|nil)\b`), color.Yellow},
+		{regexp.MustCompile(`\b(int|string|bool|float|rune|byte|error)\b`), color.Cyan},
+		{regexp.MustCompile(`//.*`), color.Fg256(241)},
+		{regexp.MustCompile(`".*?"`), color.Green},
+		{regexp.MustCompile("`.*?`"), color.Green},
+		{regexp.MustCompile(`'.*?'`), color.Green},
 	}
 }
 
@@ -550,13 +539,13 @@ func (h *MarkdownHighlighter) Name() string { return "Markdown" }
 
 func (h *MarkdownHighlighter) Rules() []HighlightRule {
 	return []HighlightRule{
-		{regexp.MustCompile(`^#+.+`), blue},          // Headers
-		{regexp.MustCompile(`\*\*.+?\*\*`), red},     // Bold
-		{regexp.MustCompile(`\*.+?\*`), yellow},      // Italic
-		{regexp.MustCompile("`.+?`"), green},         // Code
-		{regexp.MustCompile(`\[.+?\]\(.+?\)`), cyan}, // Links
-		{regexp.MustCompile(`^- .+`), magenta},       // List items
-		{regexp.MustCompile(`^\d+\. .+`), magenta},   // Numbered list
+		{regexp.MustCompile(`^#+.+`), color.Blue},          // Headers
+		{regexp.MustCompile(`\*\*.+?\*\*`), color.Red},     // Bold
+		{regexp.MustCompile(`\*.+?\*`), color.Yellow},      // Italic
+		{regexp.MustCompile("`.+?`"), color.Green},         // Code
+		{regexp.MustCompile(`\[.+?\]\(.+?\)`), color.Cyan}, // Links
+		{regexp.MustCompile(`^- .+`), color.Magenta},       // List items
+		{regexp.MustCompile(`^\d+\. .+`), color.Magenta},   // Numbered list
 	}
 }
 

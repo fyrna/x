@@ -11,23 +11,21 @@ package main
 
 import (
   "fmt"
+  "strings"
 
   "github.com/fyrna/x/textarea"
 )
 
 func main() {
-  editor, err := textarea.NewInput("Title", "Body")
-	if err != nil {
-		panic(err)
-	}
+  editor := textarea.NewInput("Title", "Body")
 
-	lines, err := editor.Run()
-	if err != nil {
-		fmt.Printf("\nAborted: %v\n", err)
-		return
-	}
-  
-	fmt.Println("\nResult:")
-	fmt.Println(strings.Join(lines, "\n"))
+  lines, err := editor.Run()
+  if err != nil {
+    fmt.Printf("\nAborted: %v\n", err)
+    return
+  }
+
+  fmt.Println("\nResult:")
+  fmt.Println(strings.Join(lines, "\n"))
 }
 ```
