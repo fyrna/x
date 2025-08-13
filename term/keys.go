@@ -8,8 +8,6 @@ import (
 	"errors"
 	"os"
 	"unicode/utf8"
-
-	"golang.org/x/term"
 )
 
 type Key uint16
@@ -53,10 +51,10 @@ const (
 type Mod uint8
 
 const (
-	KeyModNone  Mod = 0
-	KeyModShift Mod = 1 << iota
-	KeyModAlt
-	KeyModCtrl
+	ModNone  Mod = 0
+	ModShift Mod = 1 << iota
+	ModAlt
+	ModCtrl
 )
 
 // Event represents a key event
@@ -67,69 +65,132 @@ type Event struct {
 	Width int // Visual width of rune (for CJK)
 }
 
-type reader struct{ fd int }
-
-var (
-	// singleton after Init()
-	stdinReader *reader
-	oldState    *term.State
-)
-
-// Init raw mode, call once.
-func Init() error {
-	if stdinReader != nil {
-		return nil
-	}
-
-	var err error
-
-	oldState, err = term.MakeRaw(int(os.Stdin.Fd()))
-	if err != nil {
-		return err
-	}
-
-	stdinReader = &reader{fd: int(os.Stdin.Fd())}
-	return nil
+type keyReader struct {
+	fd int
 }
 
-// Restore()
-func Restore() error {
-	if oldState == nil {
+// KeyboardState holds keyboard raw mode state
+type KeyboardState struct {
+	termState *State
+	reader    *keyReader
+}
+
+func MakeKeyboardRaw() (*KeyboardState, error) {
+	return MakeKeyboardRawFd(DefaultFd)
+}
+
+func MakeKeyboardRawFd(fd int) (*KeyboardState, error) {
+	termState, err := MakeRaw(fd)
+	if err != nil {
+		return nil, err
+	}
+
+	return &KeyboardState{
+		termState: termState,
+		reader:    &keyReader{fd: fd},
+	}, nil
+}
+
+// RestoreKeyboard restores keyboard
+func RestoreKeyboard(state *KeyboardState) error {
+	if state == nil || state.termState == nil {
 		return nil
 	}
 
-	err := term.Restore(int(os.Stdin.Fd()), oldState)
-	oldState = nil
-	stdinReader = nil
-
+	err := Restore(state.reader.fd, state.termState)
+	state.termState = nil // Clear state
 	return err
 }
 
-// Read() blocking high-level API
-func Read() (Event, error) {
-	if stdinReader == nil {
-		return Event{}, errors.New("call term.Init() first")
+// ReadEvent reads keyboard event (blocking)
+// Requires MakeKeyboardRaw() to be called first
+func ReadEvent(state *KeyboardState) (Event, error) {
+	if state == nil || state.reader == nil {
+		return Event{}, errors.New("keyboard not in raw mode, call MakeKeyboardRaw() first")
 	}
 
-	b, err := stdinReader.readByte()
+	b, err := state.reader.readByte()
 	if err != nil {
 		return Event{}, err
 	}
 
-	return stdinReader.parse(b)
+	return state.reader.parse(b)
 }
 
 func (ev Event) IsCtrl(r rune) bool {
-	return ev.Key == KeyRune && ev.Mod&KeyModCtrl != 0 && ev.Rune == r
+	return ev.Key == KeyRune && ev.Mod&ModCtrl != 0 && ev.Rune == r
 }
 
-func (r *reader) readByte() (byte, error) {
+func (ev Event) IsAlt(r rune) bool {
+	return ev.Key == KeyRune && ev.Mod&ModAlt != 0 && ev.Rune == r
+}
+func (ev Event) IsShift(r rune) bool {
+	return ev.Key == KeyRune && ev.Mod&ModShift != 0 && ev.Rune == r
+}
+
+// String returns string representation of event
+func (ev Event) String() string {
+	var mod string
+	if ev.Mod&ModCtrl != 0 {
+		mod += "Ctrl+"
+	}
+	if ev.Mod&ModAlt != 0 {
+		mod += "Alt+"
+	}
+	if ev.Mod&ModShift != 0 {
+		mod += "Shift+"
+	}
+	if ev.Key == KeyRune {
+		return mod + string(ev.Rune)
+	}
+
+	keyNames := map[Key]string{
+		KeyEscape:    "Escape",
+		KeyEnter:     "Enter",
+		KeyBackspace: "Backspace",
+		KeyTab:       "Tab",
+		KeySpace:     "Space",
+		KeyUp:        "Up",
+		KeyDown:      "Down",
+		KeyLeft:      "Left",
+		KeyRight:     "Right",
+		KeyHome:      "Home",
+		KeyEnd:       "End",
+		KeyPgUp:      "PgUp",
+		KeyPgDown:    "PgDown",
+		KeyF1:        "F1",
+		KeyF2:        "F2",
+		KeyF3:        "F3",
+		KeyF4:        "F4",
+		KeyF5:        "F5",
+		KeyF6:        "F6",
+		KeyF7:        "F7",
+		KeyF8:        "F8",
+		KeyF9:        "F9",
+		KeyF10:       "F10",
+		KeyF11:       "F11",
+		KeyF12:       "F12",
+	}
+
+	if name, ok := keyNames[ev.Key]; ok {
+		return mod + name
+	}
+
+	return mod + "Unknown"
+}
+
+func (r *keyReader) readByte() (byte, error) {
 	var buf [1]byte
-	_, err := os.Stdin.Read(buf[:])
+	file := os.Stdin
+	if r.fd != DefaultFd {
+		file = os.NewFile(uintptr(r.fd), "terminal")
+		defer file.Close()
+	}
+	_, err := file.Read(buf[:])
 	return buf[0], err
 }
 
-func (r *reader) parse(b byte) (Event, error) {
+func (r *keyReader) parse(b byte) (Event, error) {
 	switch b {
 	case 0x1b: // ESC
 		return r.parseEsc()
@@ -144,8 +205,9 @@ func (r *reader) parse(b byte) (Event, error) {
 	default:
 		// Ctrl-letter (0x01–0x1a)
 		if b >= 0x01 && b <= 0x1a {
-			return Event{Key: KeyRune, Rune: rune(b + 96), Mod: KeyModCtrl}, nil
+			return Event{Key: KeyRune, Rune: rune(b + 96), Mod: ModCtrl}, nil
 		}
+
 		// printable
 		if b >= 0x20 && b < 0x7f {
 			r, _ := utf8.DecodeRune([]byte{b})
@@ -159,16 +221,15 @@ func (r *reader) parse(b byte) (Event, error) {
 	}
 }
 
-func (r *reader) parseEsc() (Event, error) {
+func (r *keyReader) parseEsc() (Event, error) {
 	seq, err := r.readByte()
-
 	if err != nil {
 		return Event{Key: KeyEscape}, nil // lone ESC
 	}
 
 	if seq != '[' && seq != 'O' {
 		// Alt+<key> (ESC + key)
-		return Event{Key: KeyRune, Rune: rune(seq), Mod: KeyModAlt}, nil
+		return Event{Key: KeyRune, Rune: rune(seq), Mod: ModAlt}, nil
 	}
 
 	// CSI / SS3
