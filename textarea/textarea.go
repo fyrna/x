@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
-	"os"
 	"regexp"
 	"strings"
 
@@ -478,7 +477,7 @@ func (t *TextArea) renderInactiveLine(buf *bytes.Buffer, line []rune) {
 
 func (t *TextArea) renderSearchBox(buf *bytes.Buffer) {
 	row := 4 + len(t.lines) + 1
-	fmt.Fprintf(os.Stdout, "\033[%d;1H", row)
+	buf.WriteString(fmt.Sprintf("\033[%d;1H", row))
 	buf.WriteString("\033[7mSearch: ")
 	buf.WriteString(string(t.searchTerm))
 	buf.WriteString("\033[0m\033[K")
@@ -491,7 +490,7 @@ func (t *TextArea) renderStatusBar(buf *bytes.Buffer) {
 		row += 2
 	}
 
-	fmt.Fprintf(os.Stdout, "\033[%d;1H", row)
+	buf.WriteString(fmt.Sprintf("\033[%d;1H", row))
 	buf.WriteString(lightGrey)
 
 	// Left status
