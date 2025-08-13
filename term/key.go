@@ -121,6 +121,10 @@ func Read() (Event, error) {
 	return stdinReader.parse(b)
 }
 
+func (ev Event) IsCtrl(r rune) bool {
+	return ev.Key == KeyRune && ev.Mod&KeyModCtrl != 0 && ev.Rune == r
+}
+
 func (r *reader) readByte() (byte, error) {
 	var buf [1]byte
 	_, err := os.Stdin.Read(buf[:])
