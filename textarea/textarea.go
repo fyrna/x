@@ -1,15 +1,20 @@
 package textarea
 
 import (
-	"bytes"
 	"errors"
 	"fmt"
+	"os"
 	"regexp"
 	"strings"
 
 	"github.com/fyrna/x/color"
 	"github.com/fyrna/x/term"
+	"github.com/fyrna/x/term/cursor"
+	"github.com/fyrna/x/term/key"
+	"github.com/fyrna/x/term/screen"
 )
+
+var ErrFinished = errors.New("finished")
 
 // HighlightRule defines a syntax highlighting rule
 type HighlightRule struct {
@@ -62,16 +67,19 @@ func NewInput(title string) *TextArea {
 
 // Run starts the text input session
 func (t *TextArea) Run() ([]string, error) {
-	if err := term.Init(); err != nil {
+	terminal := term.NewStdinTerminal()
+	err := terminal.MakeRaw()
+	if err != nil {
 		return nil, err
 	}
+	defer terminal.Restore()
 
-	defer term.Restore()
+	keyReader := key.NewReader(terminal)
 
 	for {
 		t.redraw()
 
-		ev, err := term.Read()
+		ev, err := keyReader.ReadEvent()
 		if err != nil {
 			return nil, err
 		}
@@ -93,7 +101,7 @@ func (t *TextArea) Run() ([]string, error) {
 }
 
 // handleNormalInput processes input in normal mode
-func (t *TextArea) handleNormalInput(ev term.Event) error {
+func (t *TextArea) handleNormalInput(ev key.Event) error {
 	switch {
 	case ev.IsCtrl('c'):
 		return errors.New("interrupted")
@@ -108,40 +116,41 @@ func (t *TextArea) handleNormalInput(ev term.Event) error {
 	case ev.IsCtrl('l'):
 		t.toggleLineNumbers()
 		return nil
-	case ev.Key == term.KeyRune:
+	case ev.Key == key.Rune:
 		t.insertRune(ev.Rune)
-	case ev.Key == term.KeySpace:
+	case ev.Key == key.Space:
 		t.insertRune(' ')
-	case ev.Key == term.KeyEnter:
+	case ev.Key == key.Enter:
 		t.handleEnter()
-	case ev.Key == term.KeyBackspace:
+	case ev.Key == key.Backspace:
 		t.handleBackspace()
-	case ev.Key == term.KeyUp:
+
+	case ev.Key == key.Up:
 		t.moveUp()
-	case ev.Key == term.KeyDown:
+	case ev.Key == key.Down:
 		t.moveDown()
-	case ev.Key == term.KeyLeft:
+	case ev.Key == key.Left:
 		t.moveLeft()
-	case ev.Key == term.KeyRight:
+	case ev.Key == key.Right:
 		t.moveRight()
 	}
 	return nil
 }
 
 // handleSearchInput processes input in search mode
-func (t *TextArea) handleSearchInput(ev term.Event) error {
+func (t *TextArea) handleSearchInput(ev key.Event) error {
 	switch ev.Key {
-	case term.KeyEscape:
+	case key.Escape:
 		t.searchMode = false
-	case term.KeyEnter:
+	case key.Enter:
 		t.searchMode = false
 		t.search(string(t.searchTerm))
 		t.searchTerm = nil
-	case term.KeyBackspace:
+	case key.Backspace:
 		if len(t.searchTerm) > 0 {
 			t.searchTerm = t.searchTerm[:len(t.searchTerm)-1]
 		}
-	case term.KeyRune:
+	case key.Rune:
 		t.searchTerm = append(t.searchTerm, ev.Rune)
 	}
 	return nil
@@ -323,106 +332,104 @@ func (t *TextArea) toggleLineNumbers() {
 // ** Rendering **
 
 func (t *TextArea) redraw() {
-	var buf bytes.Buffer
-
-	// Clear screen and move to top-left
-	buf.WriteString("\033[H\033[2J")
+	screen.Clear()
 
 	// Title
-	buf.WriteString(t.title)
-	buf.WriteString("\n\n")
+	os.Stdout.WriteString(t.title + "\n\n")
 
 	// Content lines
 	for i, line := range t.lines {
-		buf.WriteString(fmt.Sprintf("\033[%d;1H", 4+i)) // Position each line
-		t.renderLine(&buf, i, line)
+		cursor.To(4+i, 1) // Position each line
+		t.renderLine(i, line)
 	}
 
 	// Search box
 	if t.searchMode {
-		t.renderSearchBox(&buf)
+		t.renderSearchBox()
 	}
 
 	// Status bar
-	t.renderStatusBar(&buf)
-
-	fmt.Print(buf.String())
+	t.renderStatusBar()
 }
 
-func (t *TextArea) renderLine(buf *bytes.Buffer, lineNum int, line []rune) {
+func (t *TextArea) renderLine(lineNum int, line []rune) {
 	// Line number
 	if t.showLineNr {
-		buf.WriteString(color.Fg256(241))
-		fmt.Fprintf(buf, " %3d ", lineNum+1)
-		buf.WriteString(color.Reset)
-		buf.WriteString(" ")
+		os.Stdout.WriteString(color.Fg256(241))
+		fmt.Fprintf(os.Stdout, " %3d ", lineNum+1)
+		os.Stdout.WriteString(color.Reset)
+		os.Stdout.WriteString(" ")
 	}
 
 	// Line border
-	buf.WriteString(color.Fg256(241))
-	buf.WriteString("│ ")
-	buf.WriteString(color.Reset)
+	os.Stdout.WriteString(color.Fg256(241))
+	os.Stdout.WriteString("│ ")
+	os.Stdout.WriteString(color.Reset)
 
 	// Line content
 	if lineNum == t.cursor.y {
-		t.renderActiveLine(buf, line)
+		t.renderActiveLine(line)
 	} else {
-		t.renderInactiveLine(buf, line)
+		t.renderInactiveLine(line)
 	}
 }
 
-func (t *TextArea) renderActiveLine(buf *bytes.Buffer, line []rune) {
+func (t *TextArea) renderActiveLine(line []rune) {
 	// highlighted := t.highlightLine(line)
 
 	left := string(line[:t.cursor.x])
 	right := string(line[t.cursor.x:])
 
-	buf.WriteString(t.highlightLine([]rune(left)))
-	buf.WriteString(color.Green)
-	buf.WriteString("|")
-	buf.WriteString(color.Reset)
-	buf.WriteString(t.highlightLine([]rune(right)))
-	buf.WriteString("\033[K") // Clear to end of line
+	os.Stdout.WriteString(t.highlightLine([]rune(left)))
+	os.Stdout.WriteString(color.Green)
+	os.Stdout.WriteString("|")
+	os.Stdout.WriteString(color.Reset)
+	os.Stdout.WriteString(t.highlightLine([]rune(right)))
+	screen.ClearLine(0)
 }
 
-func (t *TextArea) renderInactiveLine(buf *bytes.Buffer, line []rune) {
-	buf.WriteString(t.highlightLine(line))
-	buf.WriteString("\033[K") // Clear to end of line
+func (t *TextArea) renderInactiveLine(line []rune) {
+	os.Stdout.WriteString(t.highlightLine(line))
+	screen.ClearLine(0)
 }
 
-func (t *TextArea) renderSearchBox(buf *bytes.Buffer) {
+func (t *TextArea) renderSearchBox() {
 	row := 4 + len(t.lines) + 1
-	buf.WriteString(fmt.Sprintf("\033[%d;1H", row))
-	buf.WriteString("\033[7mSearch: ")
-	buf.WriteString(string(t.searchTerm))
-	buf.WriteString("\033[0m\033[K")
+
+	cursor.To(row, 1)
+
+	os.Stdout.WriteString("\033[7mSearch: ")
+	os.Stdout.WriteString(string(t.searchTerm))
+
+	screen.ClearLine(0)
 }
 
-func (t *TextArea) renderStatusBar(buf *bytes.Buffer) {
+func (t *TextArea) renderStatusBar() {
 	row := 4 + len(t.lines) + 3
 
 	if t.searchMode {
 		row += 2
 	}
 
-	buf.WriteString(fmt.Sprintf("\033[%d;1H", row))
-	buf.WriteString(color.Fg256(246))
+	cursor.To(row, 1)
+	// os.Stdout.WriteString(fmt.Sprintf("\033[%d;1H", row))
+	os.Stdout.WriteString(color.Fg256(246))
 
 	// Left status
 	status := fmt.Sprintf(" %s | Ln %d, Col %d ", t.getSyntaxName(), t.cursor.y+1, t.cursor.x+1)
-	buf.WriteString(status)
+	os.Stdout.WriteString(status)
 
 	// Right status
 	help := " ^S:Search ^G:Syntax ^L:LineNums ^D:Finish "
-	width := 70
+	width := 65
 	padding := width - len(status) - len(help) - 1
 
 	if padding > 0 {
-		buf.WriteString(strings.Repeat(" ", padding))
+		os.Stdout.WriteString(strings.Repeat(" ", padding))
 	}
 
-	buf.WriteString(help)
-	buf.WriteString(color.Reset)
+	os.Stdout.WriteString(help)
+	os.Stdout.WriteString(color.Reset)
 }
 
 func (t *TextArea) getSyntaxName() string {
@@ -484,6 +491,3 @@ func (t *TextArea) finish() []string {
 	}
 	return result
 }
-
-// ErrFinished is returned when the user finishes input (Ctrl-D)
-var ErrFinished = errors.New("finished")
