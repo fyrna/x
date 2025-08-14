@@ -67,56 +67,29 @@ type Event struct {
 	Width int // Visual width of rune (for CJK)
 }
 
+// Reader handles keyboard input
 type Reader struct {
-	fd int
+	term *term.Terminal
 }
 
-// KeyboardState holds keyboard raw mode state
-type KeyboardState struct {
-	termState *term.State
-	reader    *Reader
-}
-
-func MakeKeyboardRaw() (*KeyboardState, error) {
-	return MakeKeyboardRawFd(term.DefaultFd)
-}
-
-func MakeKeyboardRawFd(fd int) (*KeyboardState, error) {
-	termState, err := term.MakeRaw(fd)
-	if err != nil {
-		return nil, err
-	}
-
-	return &KeyboardState{
-		termState: termState,
-		reader:    &Reader{fd: fd},
-	}, nil
-}
-
-// RestoreKeyboard restores keyboard
-func RestoreKeyboard(state *KeyboardState) error {
-	if state == nil || state.termState == nil {
-		return nil
-	}
-
-	err := term.Restore(state.reader.fd, state.termState)
-	state.termState = nil // Clear state
-	return err
+// NewReader creates a new keyboard reader for the given terminal
+func NewReader(t *term.Terminal) *Reader {
+	return &Reader{term: t}
 }
 
 // ReadEvent reads keyboard event (blocking)
 // Requires MakeKeyboardRaw() to be called first
-func ReadEvent(state *KeyboardState) (Event, error) {
-	if state == nil || state.reader == nil {
-		return Event{}, errors.New("keyboard not in raw mode, call MakeKeyboardRaw() first")
+func (r *Reader) ReadEvent() (Event, error) {
+	if r.term == nil {
+		return Event{}, errors.New("terminal not initialized")
 	}
 
-	b, err := state.reader.readByte()
+	b, err := r.readByte()
 	if err != nil {
 		return Event{}, err
 	}
 
-	return state.reader.parse(b)
+	return r.parse(b)
 }
 
 func (ev Event) IsCtrl(r rune) bool {
@@ -183,12 +156,7 @@ func (ev Event) String() string {
 
 func (r *Reader) readByte() (byte, error) {
 	var buf [1]byte
-	file := os.Stdin
-	if r.fd != term.DefaultFd {
-		file = os.NewFile(uintptr(r.fd), "terminal")
-		defer file.Close()
-	}
-	_, err := file.Read(buf[:])
+	_, err := os.NewFile(uintptr(r.term.Fd()), "terminal").Read(buf[:])
 	return buf[0], err
 }
 
@@ -234,8 +202,13 @@ func (r *Reader) parseEsc() (Event, error) {
 		return Event{Key: Rune, Rune: rune(seq), Mod: ModAlt}, nil
 	}
 
-	// CSI / SS3
-	b2, _ := r.readByte()
+	// Read the next byte for sequence
+	b2, err := r.readByte()
+	if err != nil {
+		return Event{Key: Escape}, nil
+	}
+
+	// Handle multi-byte sequences
 	switch string([]byte{seq, b2}) {
 	case "[A":
 		return Event{Key: Up}, nil
@@ -249,10 +222,6 @@ func (r *Reader) parseEsc() (Event, error) {
 		return Event{Key: Home}, nil
 	case "[F":
 		return Event{Key: End}, nil
-	case "[5~":
-		return Event{Key: PgUp}, nil
-	case "[6~":
-		return Event{Key: PgDown}, nil
 	case "OP":
 		return Event{Key: F1}, nil
 	case "OQ":
@@ -261,22 +230,38 @@ func (r *Reader) parseEsc() (Event, error) {
 		return Event{Key: F3}, nil
 	case "OS":
 		return Event{Key: F4}, nil
-	case "[15~":
-		return Event{Key: F5}, nil
-	case "[17~":
-		return Event{Key: F6}, nil
-	case "[18~":
-		return Event{Key: F7}, nil
-	case "[19~":
-		return Event{Key: F8}, nil
-	case "[20~":
-		return Event{Key: F9}, nil
-	case "[21~":
-		return Event{Key: F10}, nil
-	case "[23~":
-		return Event{Key: F11}, nil
-	case "[24~":
-		return Event{Key: F12}, nil
 	}
+
+	// Handle longer sequences
+	if seq == '[' && b2 >= '0' && b2 <= '9' {
+		b3, err := r.readByte()
+		if err != nil {
+			return Event{Key: Unknown}, err
+		}
+
+		switch string([]byte{seq, b2, b3}) {
+		case "[5~":
+			return Event{Key: PgUp}, nil
+		case "[6~":
+			return Event{Key: PgDown}, nil
+		case "[15~":
+			return Event{Key: F5}, nil
+		case "[17~":
+			return Event{Key: F6}, nil
+		case "[18~":
+			return Event{Key: F7}, nil
+		case "[19~":
+			return Event{Key: F8}, nil
+		case "[20~":
+			return Event{Key: F9}, nil
+		case "[21~":
+			return Event{Key: F10}, nil
+		case "[23~":
+			return Event{Key: F11}, nil
+		case "[24~":
+			return Event{Key: F12}, nil
+		}
+	}
+
 	return Event{Key: Unknown}, nil
 }
