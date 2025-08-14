@@ -3,49 +3,45 @@
 package term
 
 import (
-	"golang.org/x/term"
 	"os"
+
+	"golang.org/x/term"
 )
 
-var (
-	// IsTerminal returns whether the given file descriptor is a terminal.
-	IsTerminal = term.IsTerminal
-
-	// MakeRaw puts the terminal connected to the given file descriptor into raw mode and returns the previous state of the terminal so that it can be restored.
-	MakeRaw = term.MakeRaw
-
-	// Restore restores the terminal connected to the given file descriptor to a previous state.
-	Restore = term.Restore
-
-	// 	GetSize returns the visible dimensions of the given terminal.
-	//
-	// These dimensions don't include any scrollback buffer height.
-	GetSize = term.GetSize
-)
-
+// State contains the state of a terminal.
 type State = term.State
 
-var DefaultFd int = int(os.Stdin.Fd())
-
-func IsStdinTerminal() bool {
-	return IsTerminal(DefaultFd)
+// IsTerminal returns whether the given file descriptor is a terminal.
+func IsTerminal(fd int) bool {
+	return term.IsTerminal(fd)
 }
 
-func MakeStdinRaw() (*State, error) {
-	return MakeRaw(DefaultFd)
+// MakeRaw puts the terminal connected to the given file descriptor into raw mode and returns the previous state of the terminal so that it can be restored.
+func MakeRaw(fd int) (*State, error) {
+	return term.MakeRaw(fd)
 }
 
-func RestoreStdin(state *State) error {
-	return Restore(DefaultFd, state)
+// Restore restores the terminal connected to the given file descriptor to a previous state.
+func Restore(fd int, oldState *State) error {
+	return term.Restore(fd, oldState)
 }
 
-func GetStdinSize() (width, height int, err error) {
-	return GetSize(DefaultFd)
+//	GetSize returns the visible dimensions of the given terminal.
+//
+// These dimensions don't include any scrollback buffer height.
+func GetSize(fd int) (width, height int, err error) {
+	return term.GetSize(fd)
 }
+
+// our own!
 
 type Terminal struct {
 	fd    int
 	state *State
+}
+
+func DefaultFd() int {
+	return int(os.Stdin.Fd())
 }
 
 func NewTerminal(fd int) *Terminal {
@@ -53,8 +49,9 @@ func NewTerminal(fd int) *Terminal {
 }
 
 func NewStdinTerminal() *Terminal {
-	return NewTerminal(DefaultFd)
+	return NewTerminal(DefaultFd())
 }
+
 func (t *Terminal) Fd() int {
 	return t.fd
 }
