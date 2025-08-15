@@ -58,3 +58,12 @@ func BgRGB(r, g, b int) string {
 	return "\x1b[48;2;" + strconv.Itoa(r) + ";" +
 		strconv.Itoa(g) + ";" + strconv.Itoa(b) + "m"
 }
+
+// sugar for HEXtoRGB
+func FgHEX(c string) string {
+	return HEXtoRGB(0, c)
+}
+
+func BgHEX(c string) string {
+	return HEXtoRGB(1, c)
+}
