@@ -116,7 +116,6 @@ func (m *Mem) Scan(prefix []byte, fn func(k, v []byte) error) error {
 	return nil
 }
 
-// wip, it does nothing for now
 func (m *Mem) Close() error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
