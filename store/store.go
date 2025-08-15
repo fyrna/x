@@ -1,12 +1,15 @@
 package store
 
 import (
-	"bytes"
 	"errors"
+	"strings"
 	"sync"
 )
 
-var ErrNotFound = errors.New("key not found")
+var (
+	ErrNotFound = errors.New("key not found")
+	ErrClosed   = errors.New("state is closed")
+)
 
 // Backend is the lowest-level contract: []byte ↔ []byte.
 type Backend interface {
@@ -18,8 +21,9 @@ type Backend interface {
 }
 
 type Mem struct {
-	mu sync.RWMutex
-	m  map[string][]byte
+	mu     sync.RWMutex
+	m      map[string][]byte
+	closed bool
 }
 
 // NewMem returns a fresh in-memory store.
@@ -27,40 +31,84 @@ func NewMem() *Mem {
 	return &Mem{m: make(map[string][]byte)}
 }
 
+func clone(b []byte) []byte {
+	if b == nil {
+		return nil
+	}
+
+	c := make([]byte, len(b))
+	copy(c, b)
+	return c
+}
+
 func (m *Mem) Put(k, v []byte) error {
 	m.mu.Lock()
-	m.m[string(k)] = v
-	m.mu.Unlock()
+	defer m.mu.Unlock()
+
+	if m.closed {
+		return ErrClosed
+	}
+
+	m.m[string(k)] = clone(v)
 	return nil
 }
 
 func (m *Mem) Get(k []byte) ([]byte, error) {
 	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	if m.closed {
+		return nil, ErrClosed
+	}
+
 	v, ok := m.m[string(k)]
-	m.mu.RUnlock()
 	if !ok {
 		return nil, ErrNotFound
 	}
-	return v, nil
+	return clone(v), nil
 }
 
 func (m *Mem) Delete(k []byte) error {
 	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	if m.closed {
+		return ErrClosed
+	}
+
+	sk := string(k)
+	if _, ok := m.m[sk]; !ok {
+		return ErrNotFound
+	}
+
 	delete(m.m, string(k))
-	m.mu.Unlock()
 	return nil
 }
 
 func (m *Mem) Scan(prefix []byte, fn func(k, v []byte) error) error {
 	m.mu.RLock()
-	defer m.mu.RUnlock()
+	if m.closed {
+		m.mu.RUnlock()
+		return ErrClosed
+	}
 
-	for k, v := range m.m {
-		// TODO: improve with better logic
-		if !bytes.HasPrefix([]byte(k), prefix) {
+	ps := string(prefix)
+	type kv struct{ k, v []byte }
+	var out []kv
+
+	for sk, v := range m.m {
+		if !strings.HasPrefix(sk, ps) {
 			continue
 		}
-		if err := fn([]byte(k), v); err != nil {
+		kb := []byte(sk)
+		vb := clone(v)
+		out = append(out, kv{kb, vb})
+	}
+
+	m.mu.RUnlock()
+
+	for _, p := range out {
+		if err := fn(p.k, p.v); err != nil {
 			return err
 		}
 	}
@@ -70,5 +118,15 @@ func (m *Mem) Scan(prefix []byte, fn func(k, v []byte) error) error {
 
 // wip, it does nothing for now
 func (m *Mem) Close() error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.closed {
+		return nil
+	}
+	for k := range m.m {
+		delete(m.m, k)
+	}
+	m.m = nil
+	m.closed = true
 	return nil
 }
