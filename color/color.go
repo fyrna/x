@@ -1,7 +1,5 @@
 // Package color provides a tiny, zero-dependency helper set for ANSI colors
-// (16 standard, 256 extended, and 24-bit true color).  It also ships a
-// thread-safe color store plus a micro-plugin system so you can register
-// swatches without scattering escape codes throughout your code base.
+// (16 standard, 256 extended, 24-bit true color, and HEX).
 //
 // Quick start
 //
@@ -14,7 +12,7 @@
 //	// 24-bit RGB
 //	fmt.Println(color.FgRGB(255, 105, 180) + "hot pink" + color.Reset)
 //
-//	// Hex sugar
+//	// Hex
 //	fmt.Println(color.FgHEX("#00ff00") + "green from hex" + color.Reset)
 package color
 
