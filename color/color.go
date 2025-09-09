@@ -104,6 +104,19 @@ func HEXtoRGB(kind int, hex string) string {
 	return fmt.Sprintf("\x1b[38;2;%d;%d;%dm", r, g, b)
 }
 
+// Wrap wraps text with the given color escape sequence and a trailing reset.
+// This is a convenience function for color codes obtained from Fg256, FgRGB, FgHEX,
+// Bg256, BgRGB, BgHEX, or any of the 16-color constants.
+//
+// Example:
+//
+//	white := color.FgHEX("#ffffff")
+//	blue := color.Blue
+//	fmt.Println(color.Wrap(white, "hello") + " " + color.Wrap(blue, "world"))
+func Wrap(color, text string) string {
+	return color + text + Reset
+}
+
 // Color represents a 24-bit RGB color plus an optional human-readable name.
 type Color struct {
 	R, G, B uint8
