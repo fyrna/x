@@ -4,7 +4,6 @@ import (
 	"errors"
 	"strings"
 	"sync"
-	"unsafe"
 )
 
 var (
@@ -25,6 +24,7 @@ type Backend interface {
 	Close() error
 }
 
+// Mem is an in-memory Backend implementation.
 type Mem struct {
 	mu     sync.RWMutex
 	m      map[string][]byte
@@ -45,14 +45,6 @@ func clone(b []byte) []byte {
 	return c
 }
 
-// first time usind unsafe XD
-func b2s(b []byte) string {
-	return *(*string)(unsafe.Pointer(&b))
-}
-func s2b(s string) []byte {
-	return *(*[]byte)(unsafe.Pointer(&s))
-}
-
 func (m *Mem) Put(k, v []byte) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -61,7 +53,7 @@ func (m *Mem) Put(k, v []byte) error {
 		return ErrClosed
 	}
 
-	m.m[b2s(k)] = clone(v)
+	m.m[string(k)] = clone(v)
 	return nil
 }
 
@@ -73,7 +65,7 @@ func (m *Mem) Get(k []byte) ([]byte, error) {
 		return nil, ErrClosed
 	}
 
-	v, ok := m.m[b2s(k)]
+	v, ok := m.m[string(k)]
 	if !ok {
 		return nil, ErrNotFound
 	}
@@ -89,7 +81,7 @@ func (m *Mem) Delete(k []byte) error {
 		return ErrClosed
 	}
 
-	sk := b2s(k)
+	sk := string(k)
 	if _, ok := m.m[sk]; !ok {
 		return ErrNotFound
 	}
@@ -105,21 +97,21 @@ func (m *Mem) Scan(prefix []byte, fn func(k, v []byte) error) error {
 		return ErrClosed
 	}
 
-	ps := b2s(prefix)
 	type kv struct{ k, v []byte }
-	var out []kv
+	ps := string(prefix)
+	out := make([]kv, 0, 64)
 
 	for sk, v := range m.m {
 		if !strings.HasPrefix(sk, ps) {
 			continue
 		}
-		out = append(out, kv{s2b(sk), clone(v)})
+		out = append(out, kv{[]byte(sk), clone(v)})
 	}
 
 	m.mu.RUnlock()
 
-	for _, p := range out {
-		if err := fn(p.k, p.v); err != nil {
+	for _, e := range out {
+		if err := fn(e.k, e.v); err != nil {
 			return err
 		}
 	}
@@ -135,16 +127,16 @@ func (m *Mem) Range(fn func(k, v []byte) error) error {
 	}
 
 	type kv struct{ k, v []byte }
-	var out []kv
+	out := make([]kv, 0, len(m.m))
 
 	for sk, v := range m.m {
-		out = append(out, kv{s2b(sk), clone(v)})
+		out = append(out, kv{[]byte(sk), clone(v)})
 	}
 
 	m.mu.RUnlock()
 
-	for _, p := range out {
-		if err := fn(p.k, p.v); err != nil {
+	for _, e := range out {
+		if err := fn(e.k, e.v); err != nil {
 			return err
 		}
 	}
@@ -156,12 +148,16 @@ func (m *Mem) Keys(prefix []byte) [][]byte {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 
-	var res [][]byte
-	ps := b2s(prefix)
+	if m.closed {
+		return nil
+	}
+
+	ps := string(prefix)
+	res := make([][]byte, 0, 64)
 
 	for sk := range m.m {
 		if strings.HasPrefix(sk, ps) {
-			res = append(res, s2b(sk))
+			res = append(res, []byte(sk))
 		}
 	}
 
@@ -172,7 +168,7 @@ func (m *Mem) Exists(k []byte) bool {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 
-	_, ok := m.m[b2s(k)]
+	_, ok := m.m[string(k)]
 	return ok
 }
 
