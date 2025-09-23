@@ -4,6 +4,7 @@ import (
 	"errors"
 	"strings"
 	"sync"
+	"unsafe"
 )
 
 var (
@@ -17,6 +18,10 @@ type Backend interface {
 	Get(key []byte) ([]byte, error)
 	Delete(key []byte) error
 	Scan(prefix []byte, fn func(k, v []byte) error) error
+	Range(fn func(k, v []byte) error) error
+	Keys(prefix []byte) [][]byte
+	Len() int
+	Exists(key []byte) bool
 	Close() error
 }
 
@@ -35,10 +40,17 @@ func clone(b []byte) []byte {
 	if b == nil {
 		return nil
 	}
-
 	c := make([]byte, len(b))
 	copy(c, b)
 	return c
+}
+
+// first time usind unsafe XD
+func b2s(b []byte) string {
+	return *(*string)(unsafe.Pointer(&b))
+}
+func s2b(s string) []byte {
+	return *(*[]byte)(unsafe.Pointer(&s))
 }
 
 func (m *Mem) Put(k, v []byte) error {
@@ -49,7 +61,7 @@ func (m *Mem) Put(k, v []byte) error {
 		return ErrClosed
 	}
 
-	m.m[string(k)] = clone(v)
+	m.m[b2s(k)] = clone(v)
 	return nil
 }
 
@@ -61,10 +73,11 @@ func (m *Mem) Get(k []byte) ([]byte, error) {
 		return nil, ErrClosed
 	}
 
-	v, ok := m.m[string(k)]
+	v, ok := m.m[b2s(k)]
 	if !ok {
 		return nil, ErrNotFound
 	}
+
 	return clone(v), nil
 }
 
@@ -76,12 +89,12 @@ func (m *Mem) Delete(k []byte) error {
 		return ErrClosed
 	}
 
-	sk := string(k)
+	sk := b2s(k)
 	if _, ok := m.m[sk]; !ok {
 		return ErrNotFound
 	}
 
-	delete(m.m, string(k))
+	delete(m.m, sk)
 	return nil
 }
 
@@ -92,7 +105,7 @@ func (m *Mem) Scan(prefix []byte, fn func(k, v []byte) error) error {
 		return ErrClosed
 	}
 
-	ps := string(prefix)
+	ps := b2s(prefix)
 	type kv struct{ k, v []byte }
 	var out []kv
 
@@ -100,9 +113,7 @@ func (m *Mem) Scan(prefix []byte, fn func(k, v []byte) error) error {
 		if !strings.HasPrefix(sk, ps) {
 			continue
 		}
-		kb := []byte(sk)
-		vb := clone(v)
-		out = append(out, kv{kb, vb})
+		out = append(out, kv{s2b(sk), clone(v)})
 	}
 
 	m.mu.RUnlock()
@@ -116,16 +127,70 @@ func (m *Mem) Scan(prefix []byte, fn func(k, v []byte) error) error {
 	return nil
 }
 
+func (m *Mem) Range(fn func(k, v []byte) error) error {
+	m.mu.RLock()
+	if m.closed {
+		m.mu.RUnlock()
+		return ErrClosed
+	}
+
+	type kv struct{ k, v []byte }
+	var out []kv
+
+	for sk, v := range m.m {
+		out = append(out, kv{s2b(sk), clone(v)})
+	}
+
+	m.mu.RUnlock()
+
+	for _, p := range out {
+		if err := fn(p.k, p.v); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+func (m *Mem) Keys(prefix []byte) [][]byte {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	var res [][]byte
+	ps := b2s(prefix)
+
+	for sk := range m.m {
+		if strings.HasPrefix(sk, ps) {
+			res = append(res, s2b(sk))
+		}
+	}
+
+	return res
+}
+
+func (m *Mem) Exists(k []byte) bool {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	_, ok := m.m[b2s(k)]
+	return ok
+}
+
+func (m *Mem) Len() int {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	return len(m.m)
+}
+
 func (m *Mem) Close() error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
+
 	if m.closed {
 		return nil
 	}
-	for k := range m.m {
-		delete(m.m, k)
-	}
-	m.m = nil
+
 	m.closed = true
 	return nil
 }
