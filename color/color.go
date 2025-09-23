@@ -71,15 +71,6 @@ const (
 	BgBrightCyan    = "\x1b[106m"
 	BgBrightWhite   = "\x1b[107m"
 
-	BoldBlack   = "\x1b[30;1m"
-	BoldRed     = "\x1b[31;1m"
-	BoldGreen   = "\x1b[32;1m"
-	BoldYellow  = "\x1b[33;1m"
-	BoldBlue    = "\x1b[34;1m"
-	BoldMagenta = "\x1b[35;1m"
-	BoldCyan    = "\x1b[36;1m"
-	BoldWhite   = "\x1b[37;1m"
-
 	Reset = "\x1b[0m"
 )
 
@@ -225,26 +216,30 @@ func Wrap(color, text string) string {
 	return color + text + Reset
 }
 
-// Color represents a 24-bit RGB color plus an optional human-readable name.
+// Style combines multiple ANSI escape sequences (colors and styles).
+// Useful for creating compound styles like bold red text.
+func Style(codes ...string) string {
+	if !Enabled {
+		return ""
+	}
+	return strings.Join(codes, "")
+}
+
+type Mode int
+
+const (
+	ModeANSI Mode = iota // 16-color standard
+	Mode256              // 0–255
+	ModeRGB              // R, G, B
+)
+
 type Color struct {
-	R, G, B uint8
 	Name    string
-}
-
-// ToANSI returns the foreground escape sequence for this color.
-func (c Color) ToANSI() string {
-	if !Enabled {
-		return ""
-	}
-	return fmt.Sprintf("\x1b[38;2;%d;%d;%dm", c.R, c.G, c.B)
-}
-
-// ToANSI returns the background escape sequence for this color.
-func (c Color) ToBgANSI() string {
-	if !Enabled {
-		return ""
-	}
-	return fmt.Sprintf("\x1b[48;2;%d;%d;%dm", c.R, c.G, c.B)
+	Mode    Mode     // 16, 256, RGB
+	Value   int      // index utk 16/256, atau inline ke RGB
+	R, G, B uint8    // RGB Mode
+	Bg      bool     // true = background, false = foreground
+	Styles  []string // bold, italic, underline, dll
 }
 
 // ToHEX returns the color in #rrggbb form.
@@ -257,16 +252,38 @@ func (c Color) Wrap(text string) string {
 	return Wrap(c.ToANSI(), text)
 }
 
-// WrapBg wraps text with the color's background escape codes and a trailing reset.
-func (c Color) WrapBg(text string) string {
-	return Wrap(c.ToBgANSI(), text)
-}
-
-// Style combines multiple ANSI escape sequences (colors and styles).
-// Useful for creating compound styles like bold red text.
-func Style(codes ...string) string {
+// ToANSI returns the escape sequence for this color.
+func (c Color) ToANSI() string {
 	if !Enabled {
 		return ""
 	}
-	return strings.Join(codes, "")
+
+	seq := ""
+
+	switch c.Mode {
+	case ModeANSI:
+		if c.Bg {
+			seq += fmt.Sprintf("\x1b[%dm", 40+(c.Value%8))
+		} else {
+			seq += fmt.Sprintf("\x1b[%dm", 30+(c.Value%8))
+		}
+	case Mode256:
+		if c.Bg {
+			seq += fmt.Sprintf("\x1b[48;5;%dm", c.Value)
+		} else {
+			seq += fmt.Sprintf("\x1b[38;5;%dm", c.Value)
+		}
+	case ModeRGB:
+		if c.Bg {
+			seq += fmt.Sprintf("\x1b[48;2;%d;%d;%dm", c.R, c.G, c.B)
+		} else {
+			seq += fmt.Sprintf("\x1b[38;2;%d;%d;%dm", c.R, c.G, c.B)
+		}
+	}
+
+	if len(c.Styles) > 0 {
+		seq += strings.Join(c.Styles, "")
+	}
+
+	return seq
 }
