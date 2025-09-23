@@ -287,3 +287,64 @@ func (c Color) ToANSI() string {
 
 	return seq
 }
+
+// Printf works like fmt.Printf but ensures a trailing color.Reset is present
+// if the formatted text contains any ANSI escape sequences and doesn't already
+// end with Reset. It preserves a trailing newline if present.
+func Printf(format string, a ...any) {
+	s := fmt.Sprintf(format, a...)
+
+	// if colors disabled or no escapes
+	if !Enabled || !strings.Contains(s, "\x1b[") {
+		fmt.Print(s)
+		return
+	}
+
+	// Preserve trailing newline if exists
+	hasNL := strings.HasSuffix(s, "\n")
+	if hasNL {
+		s = strings.TrimSuffix(s, "\n")
+	}
+
+	// If it already ends with Reset, nothing to do
+	if !strings.HasSuffix(s, Reset) {
+		s += Reset
+	}
+
+	// restore newline if needed
+	if hasNL {
+		s += "\n"
+	}
+
+	fmt.Print(s)
+}
+
+// Sprintf works like fmt.Sprintf but ensures a trailing color.Reset is present
+// if the formatted text contains any ANSI escape sequences and doesn't already
+// end with Reset. It preserves a trailing newline if present.
+func Sprintf(format string, a ...any) string {
+	s := fmt.Sprintf(format, a...)
+
+	// if colors disabled or no escapes, return as is
+	if !Enabled || !strings.Contains(s, "\x1b[") {
+		return s
+	}
+
+	// Preserve trailing newline if exists
+	hasNL := strings.HasSuffix(s, "\n")
+	if hasNL {
+		s = strings.TrimSuffix(s, "\n")
+	}
+
+	// If it already ends with Reset, nothing to do
+	if !strings.HasSuffix(s, Reset) {
+		s += Reset
+	}
+
+	// restore newline if needed
+	if hasNL {
+		s += "\n"
+	}
+
+	return s
+}
