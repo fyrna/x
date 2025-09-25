@@ -5,6 +5,7 @@ package fyslices
 import (
 	"fmt"
 	"strconv"
+	"strings"
 )
 
 // From returns s[i:] or an empty slice if `i` is out of range.
@@ -50,6 +51,54 @@ func Map(s []string, fn func(string) string) []string {
 		out[i] = fn(v)
 	}
 	return out
+}
+
+// JoinQuoted joins elements with sep and wraps each element in double quotes.
+// Example: []string{"a","b"} with sep="," -> `"a","b"`.
+func JoinQuoted(s []string, sep string) string {
+	out := make([]string, len(s))
+	for i, v := range s {
+		out[i] = fmt.Sprintf("%q", v)
+	}
+	return strings.Join(out, sep)
+}
+
+// Filter returns a new slice containing only elements that satisfy fn.
+func Filter(s []string, fn func(string) bool) []string {
+	out := make([]string, 0, len(s))
+	for _, v := range s {
+		if fn(v) {
+			out = append(out, v)
+		}
+	}
+	return out
+}
+
+// Unique removes duplicate values, preserving the first occurrence order.
+func Unique(s []string) []string {
+	seen := make(map[string]struct{})
+	out := []string{}
+	for _, v := range s {
+		if _, ok := seen[v]; !ok {
+			seen[v] = struct{}{}
+			out = append(out, v)
+		}
+	}
+	return out
+}
+
+// ContainsAll reports whether at least one of vals is present in s.
+func ContainsAll(s []string, vals ...string) bool {
+	set := make(map[string]struct{}, len(s))
+	for _, v := range s {
+		set[v] = struct{}{}
+	}
+	for _, v := range vals {
+		if _, ok := set[v]; ok {
+			return true
+		}
+	}
+	return false
 }
 
 // Types classifies each element as "int", "bool", or "string".
