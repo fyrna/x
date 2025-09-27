@@ -1,7 +1,6 @@
 // this is for key event, i don't want to you know, hard code this
 // and maybe i guess my implementation is stupid
 // i mean yeah i do this stuff for learning though.
-
 package key
 
 import (
@@ -16,7 +15,7 @@ type Key uint16
 
 const (
 	Unknown Key = iota
-	Rune        // Normal character, human stuff i guess?
+	Rune        // human character
 
 	Escape
 	Enter
