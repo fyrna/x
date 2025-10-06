@@ -24,10 +24,11 @@
 package color
 
 import (
-	"fmt"
 	"strconv"
 	"strings"
 )
+
+const esc = "\x1b["
 
 // Enabled controls whether color output is enabled.
 // Set to false to disable all color output (useful for non-TTY outputs).
@@ -35,55 +36,56 @@ var Enabled = true
 
 // 16-color ANSI constants
 const (
-	Black   = "\x1b[30m"
-	Red     = "\x1b[31m"
-	Green   = "\x1b[32m"
-	Yellow  = "\x1b[33m"
-	Blue    = "\x1b[34m"
-	Magenta = "\x1b[35m"
-	Cyan    = "\x1b[36m"
-	White   = "\x1b[37m"
+	Black   = esc + "30m"
+	Red     = esc + "31m"
+	Green   = esc + "32m"
+	Yellow  = esc + "33m"
+	Blue    = esc + "34m"
+	Magenta = esc + "35m"
+	Cyan    = esc + "36m"
+	White   = esc + "37m"
 
-	BrightBlack   = "\x1b[90m"
-	BrightRed     = "\x1b[91m"
-	BrightGreen   = "\x1b[92m"
-	BrightYellow  = "\x1b[93m"
-	BrightBlue    = "\x1b[94m"
-	BrightMagenta = "\x1b[95m"
-	BrightCyan    = "\x1b[96m"
-	BrightWhite   = "\x1b[97m"
+	BrightBlack   = esc + "90m"
+	BrightRed     = esc + "91m"
+	BrightGreen   = esc + "92m"
+	BrightYellow  = esc + "93m"
+	BrightBlue    = esc + "94m"
+	BrightMagenta = esc + "95m"
+	BrightCyan    = esc + "96m"
+	BrightWhite   = esc + "97m"
 
-	BgBlack   = "\x1b[40m"
-	BgRed     = "\x1b[41m"
-	BgGreen   = "\x1b[42m"
-	BgYellow  = "\x1b[43m"
-	BgBlue    = "\x1b[44m"
-	BgMagenta = "\x1b[45m"
-	BgCyan    = "\x1b[46m"
-	BgWhite   = "\x1b[47m"
+	BgBlack   = esc + "40m"
+	BgRed     = esc + "41m"
+	BgGreen   = esc + "42m"
+	BgYellow  = esc + "43m"
+	BgBlue    = esc + "44m"
+	BgMagenta = esc + "45m"
+	BgCyan    = esc + "46m"
+	BgWhite   = esc + "47m"
 
-	BgBrightBlack   = "\x1b[100m"
-	BgBrightRed     = "\x1b[101m"
-	BgBrightGreen   = "\x1b[102m"
-	BgBrightYellow  = "\x1b[103m"
-	BgBrightBlue    = "\x1b[104m"
-	BgBrightMagenta = "\x1b[105m"
-	BgBrightCyan    = "\x1b[106m"
-	BgBrightWhite   = "\x1b[107m"
-
-	Reset = "\x1b[0m"
+	BgBrightBlack   = esc + "100m"
+	BgBrightRed     = esc + "101m"
+	BgBrightGreen   = esc + "102m"
+	BgBrightYellow  = esc + "103m"
+	BgBrightBlue    = esc + "104m"
+	BgBrightMagenta = esc + "105m"
+	BgBrightCyan    = esc + "106m"
+	BgBrightWhite   = esc + "107m"
 )
 
 // Text style constants
 const (
-	Bold      = "\x1b[1m"
-	Faint     = "\x1b[2m"
-	Italic    = "\x1b[3m"
-	Underline = "\x1b[4m"
-	Blink     = "\x1b[5m"
-	Reverse   = "\x1b[7m"
-	Conceal   = "\x1b[8m"
-	Strike    = "\x1b[9m"
+	Reset      = esc + "0m"
+	Bold       = esc + "1m"
+	Faint      = esc + "2m"
+	Italic     = esc + "3m"
+	Underline  = esc + "4m"
+	Blink      = esc + "5m"
+	BlinkRapid = esc + "6m"
+	Reverse    = esc + "7m"
+	Conceal    = esc + "8m"
+	Strike     = esc + "9m"
+	Overline   = esc + "53m"
 )
 
 // Fg256 returns the escape sequence for 8-bit foreground color (0-255).
@@ -95,7 +97,7 @@ func Fg256(n int) string {
 	if n < 0 || n > 255 {
 		return ""
 	}
-	return "\x1b[38;5;" + strconv.Itoa(n) + "m"
+	return esc + "38;5;" + strconv.Itoa(n) + "m"
 }
 
 // Bg256 returns the escape sequence for 8-bit background color (0-255).
@@ -107,7 +109,7 @@ func Bg256(n int) string {
 	if n < 0 || n > 255 {
 		return ""
 	}
-	return "\x1b[48;5;" + strconv.Itoa(n) + "m"
+	return esc + "48;5;" + strconv.Itoa(n) + "m"
 }
 
 // FgRGB builds an RGB foreground escape sequence.
@@ -119,7 +121,10 @@ func FgRGB(r, g, b int) string {
 	if r < 0 || r > 255 || g < 0 || g > 255 || b < 0 || b > 255 {
 		return ""
 	}
-	return fmt.Sprintf("\x1b[38;2;%d;%d;%dm", r, g, b)
+	return esc + "38;2;" +
+		strconv.Itoa(r) + ";" +
+		strconv.Itoa(g) + ";" +
+		strconv.Itoa(b) + "m"
 }
 
 // BgRGB builds an RGB background escape sequence.
@@ -131,7 +136,10 @@ func BgRGB(r, g, b int) string {
 	if r < 0 || r > 255 || g < 0 || g > 255 || b < 0 || b > 255 {
 		return ""
 	}
-	return fmt.Sprintf("\x1b[48;2;%d;%d;%dm", r, g, b)
+	return esc + "48;2;" +
+		strconv.Itoa(r) + ";" +
+		strconv.Itoa(g) + ";" +
+		strconv.Itoa(b) + "m"
 }
 
 // FgHEX converts a hex color string to a foreground ANSI escape sequence.
@@ -194,9 +202,15 @@ func hexToANSISequence(hex string, isBg bool) string {
 	}
 
 	if isBg {
-		return fmt.Sprintf("\x1b[48;2;%d;%d;%dm", r, g, b)
+		return esc + "48;2;" +
+			strconv.Itoa(int(r)) + ";" +
+			strconv.Itoa(int(g)) + ";" +
+			strconv.Itoa(int(b)) + "m"
 	}
-	return fmt.Sprintf("\x1b[38;2;%d;%d;%dm", r, g, b)
+	return esc + "38;2;" +
+		strconv.Itoa(int(r)) + ";" +
+		strconv.Itoa(int(g)) + ";" +
+		strconv.Itoa(int(b)) + "m"
 }
 
 // Wrap wraps text with the given color escape sequence and a trailing reset.
@@ -244,7 +258,7 @@ type Color struct {
 
 // ToHEX returns the color in #rrggbb form.
 func (c Color) ToHEX() string {
-	return fmt.Sprintf("#%02x%02x%02x", c.R, c.G, c.B)
+	return "#" + byteToHex(c.R) + byteToHex(c.G) + byteToHex(c.B)
 }
 
 // Wrap wraps text with the color's foreground escape codes and a trailing reset.
@@ -263,21 +277,27 @@ func (c Color) ToANSI() string {
 	switch c.Mode {
 	case ModeANSI:
 		if c.Bg {
-			seq += fmt.Sprintf("\x1b[%dm", 40+(c.Value%8))
+			seq += esc + strconv.Itoa(40+(c.Value%8)) + "m"
 		} else {
-			seq += fmt.Sprintf("\x1b[%dm", 30+(c.Value%8))
+			seq += esc + strconv.Itoa(30+(c.Value%8)) + "m"
 		}
 	case Mode256:
 		if c.Bg {
-			seq += fmt.Sprintf("\x1b[48;5;%dm", c.Value)
+			seq += esc + "48;5;" + strconv.Itoa(c.Value) + "m"
 		} else {
-			seq += fmt.Sprintf("\x1b[38;5;%dm", c.Value)
+			seq += esc + "38;5;" + strconv.Itoa(c.Value) + "m"
 		}
 	case ModeRGB:
 		if c.Bg {
-			seq += fmt.Sprintf("\x1b[48;2;%d;%d;%dm", c.R, c.G, c.B)
+			seq += esc + "48;2;" +
+				strconv.Itoa(int(c.R)) + ";" +
+				strconv.Itoa(int(c.G)) + ";" +
+				strconv.Itoa(int(c.B)) + "m"
 		} else {
-			seq += fmt.Sprintf("\x1b[38;2;%d;%d;%dm", c.R, c.G, c.B)
+			seq += esc + "38;2;" +
+				strconv.Itoa(int(c.R)) + ";" +
+				strconv.Itoa(int(c.G)) + ";" +
+				strconv.Itoa(int(c.B)) + "m"
 		}
 	}
 
@@ -288,63 +308,9 @@ func (c Color) ToANSI() string {
 	return seq
 }
 
-// Printf works like fmt.Printf but ensures a trailing color.Reset is present
-// if the formatted text contains any ANSI escape sequences and doesn't already
-// end with Reset. It preserves a trailing newline if present.
-func Printf(format string, a ...any) {
-	s := fmt.Sprintf(format, a...)
-
-	// if colors disabled or no escapes
-	if !Enabled || !strings.Contains(s, "\x1b[") {
-		fmt.Print(s)
-		return
+func byteToHex(b uint8) string {
+	if b < 16 {
+		return "0" + strconv.FormatUint(uint64(b), 16)
 	}
-
-	// Preserve trailing newline if exists
-	hasNL := strings.HasSuffix(s, "\n")
-	if hasNL {
-		s = strings.TrimSuffix(s, "\n")
-	}
-
-	// If it already ends with Reset, nothing to do
-	if !strings.HasSuffix(s, Reset) {
-		s += Reset
-	}
-
-	// restore newline if needed
-	if hasNL {
-		s += "\n"
-	}
-
-	fmt.Print(s)
-}
-
-// Sprintf works like fmt.Sprintf but ensures a trailing color.Reset is present
-// if the formatted text contains any ANSI escape sequences and doesn't already
-// end with Reset. It preserves a trailing newline if present.
-func Sprintf(format string, a ...any) string {
-	s := fmt.Sprintf(format, a...)
-
-	// if colors disabled or no escapes, return as is
-	if !Enabled || !strings.Contains(s, "\x1b[") {
-		return s
-	}
-
-	// Preserve trailing newline if exists
-	hasNL := strings.HasSuffix(s, "\n")
-	if hasNL {
-		s = strings.TrimSuffix(s, "\n")
-	}
-
-	// If it already ends with Reset, nothing to do
-	if !strings.HasSuffix(s, Reset) {
-		s += Reset
-	}
-
-	// restore newline if needed
-	if hasNL {
-		s += "\n"
-	}
-
-	return s
+	return strconv.FormatUint(uint64(b), 16)
 }
