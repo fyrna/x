@@ -1,3 +1,4 @@
 package ctl
 
-const ESC = "\x1b["
+const ESCAPE = "\x1b"
+const ESC = ESCAPE + "["

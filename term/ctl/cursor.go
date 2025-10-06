@@ -1,7 +1,7 @@
 // Package ctl provides low-level ANSI escape sequences for terminal control.
 package ctl
 
-import "fmt"
+import "strconv"
 
 // Cursor positioning.
 const (
@@ -16,11 +16,11 @@ const (
 
 	// SavePosAlt is an alternative DEC-compatible sequence to save the cursor
 	// position.
-	SavePosAlt = "\x1b7"
+	SavePosAlt = ESCAPE + "7"
 
 	// RestorePosAlt is an alternative DEC-compatible sequence to restore the
 	// cursor position.
-	RestorePosAlt = "\x1b8"
+	RestorePosAlt = ESCAPE + "8"
 )
 
 // Cursor movement by one cell.
@@ -50,41 +50,41 @@ const (
 // MoveTo returns the escape sequence that moves the cursor to the specified
 // 1-based row and column.
 func MoveTo(row, col int) string {
-	return fmt.Sprintf(ESC+"%d;%dH", row, col)
+	return ESC + strconv.Itoa(row) + ";" + strconv.Itoa(col) + "H"
 }
 
 // MoveCol returns the escape sequence that moves the cursor to the specified
 // 1-based column in the current row.
 func MoveCol(col int) string {
-	return fmt.Sprintf(ESC+"%dG", col)
+	return ESC + strconv.Itoa(col) + "G"
 }
 
 // MoveRow returns the escape sequence that moves the cursor to the specified
 // 1-based row in the current column.
 func MoveRow(row int) string {
-	return fmt.Sprintf(ESC+"%dd", row)
+	return ESC + strconv.Itoa(row) + "d"
 }
 
 // MoveUpN returns the escape sequence that moves the cursor up by n rows.
 // n must be positive.
 func MoveUpN(n int) string {
-	return fmt.Sprintf(ESC+"%dA", n)
+	return ESC + strconv.Itoa(n) + "A"
 }
 
 // MoveDownN returns the escape sequence that moves the cursor down by n rows.
 // n must be positive.
 func MoveDownN(n int) string {
-	return fmt.Sprintf(ESC+"%dB", n)
+	return ESC + strconv.Itoa(n) + "B"
 }
 
 // MoveRightN returns the escape sequence that moves the cursor right by n
 // columns.  n must be positive.
 func MoveRightN(n int) string {
-	return fmt.Sprintf(ESC+"%dC", n)
+	return ESC + strconv.Itoa(n) + "C"
 }
 
 // MoveLeftN returns the escape sequence that moves the cursor left by n
 // columns.  n must be positive.
 func MoveLeftN(n int) string {
-	return fmt.Sprintf(ESC+"%dD", n)
+	return ESC + strconv.Itoa(n) + "D"
 }

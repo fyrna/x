@@ -1,7 +1,7 @@
 // Package ctl provides low-level ANSI escape sequences for terminal control.
 package ctl
 
-import "fmt"
+import "strconv"
 
 // Screen and scroll-back buffer.
 const (
@@ -66,23 +66,23 @@ const (
 // ScrollUpN returns the escape sequence that scrolls the viewport up by n
 // lines.  n must be positive.
 func ScrollUpN(n int) string {
-	return fmt.Sprintf(ESC+"%dS", n)
+	return ESC + strconv.Itoa(n) + "S"
 }
 
 // ScrollDownN returns the escape sequence that scrolls the viewport down by n
 // lines.  n must be positive.
 func ScrollDownN(n int) string {
-	return fmt.Sprintf(ESC+"%dT", n)
+	return ESC + strconv.Itoa(n) + "T"
 }
 
 // InsertLineN returns the escape sequence that inserts n blank lines at the
 // cursor row.  n must be positive.
 func InsertLineN(n int) string {
-	return fmt.Sprintf(ESC+"%dL", n)
+	return ESC + strconv.Itoa(n) + "L"
 }
 
 // DeleteLineN returns the escape sequence that deletes n lines starting at the
 // cursor row.  n must be positive.
 func DeleteLineN(n int) string {
-	return fmt.Sprintf(ESC+"%dM", n)
+	return ESC + strconv.Itoa(n) + "M"
 }
